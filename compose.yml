@@ -9,12 +9,16 @@ services:
       - 5020:5020
     volumes:
       - ./site/:/home/node/app
+      - node_modules:/home/node/app/node_modules
     stdin_open: true
     tty: true
     command: npm run dev
     networks:
       - music-server_MusicNet
 
+volumes:
+  node_modules:
+  
 networks:
   music-server_MusicNet:
     external: true 

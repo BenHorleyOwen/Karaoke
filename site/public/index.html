@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Karaoke</title>
+<style>
+  :root {
+    --bg: #0d0d14;
+    --surface: #16161f;
+    --border: rgba(255,255,255,0.07);
+    --accent: #a78bfa;
+    --text: #e2e2f0;
+    --muted: #77778a;
+    --highlight: #fde68a;
+    --past: rgba(255,255,255,0.2);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* header */
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  header h1 { font-size: 17px; font-weight: 600; color: var(--accent); }
+
+  /* layout */
+  main { display: flex; flex: 1; overflow: hidden; }
+
+  /* sidebar */
+  #sidebar { width: 280px; border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+  #search { width: 100%; background: transparent; border: none; border-bottom: 1px solid var(--border); color: var(--text); padding: 10px 14px; font-size: 13px; outline: none; }
+  #search::placeholder { color: var(--muted); }
+  #song-list { flex: 1; overflow-y: auto; }
+  .song { padding: 9px 14px; cursor: pointer; border-bottom: 1px solid var(--border); }
+  .song:hover, .song.active { background: rgba(167,139,250,0.1); }
+  .song.active { border-left: 2px solid var(--accent); }
+  .song-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .song-artist { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* stage */
+  #stage { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  #lyrics-area { flex: 1; overflow-y: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px; gap: 8px; }
+  .lyric-line { font-size: 28px; font-weight: 600; text-align: center; color: var(--past); line-height: 1.5; transition: color 0.25s, transform 0.25s; }
+  .lyric-line.active { color: var(--highlight); transform: scale(1.07); }
+  .lyric-line.upcoming { color: var(--muted); }
+  #lyrics-hint { color: var(--muted); font-size: 14px; text-align: center; }
+
+  /* player */
+  #player { padding: 14px 18px; border-top: 1px solid var(--border); flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; }
+  #track-label { font-size: 13px; color: var(--muted); }
+  #track-label strong { color: var(--text); }
+  #progress-row { display: flex; align-items: center; gap: 10px; }
+  #seek { flex: 1; accent-color: var(--accent); cursor: pointer; height: 4px; }
+  .t { font-size: 11px; color: var(--muted); min-width: 34px; }
+  #controls { display: flex; align-items: center; gap: 10px; }
+  button { background: none; border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  #play-btn { border-color: var(--accent); color: var(--accent); min-width: 76px; }
+  #vol { accent-color: var(--accent); width: 72px; cursor: pointer; }
+
+  audio { display: none; }
+  ::-webkit-scrollbar { width: 3px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Karaoke</h1>
+</header>
+
+<main>
+  <div id="sidebar">
+    <input id="search" type="search" placeholder="Search songs…"/>
+    <div id="song-list"><p style="padding:14px;color:var(--muted);font-size:13px;">Loading…</p></div>
+  </div>
+
+  <div id="stage">
+    <div id="lyrics-area">
+      <p id="lyrics-hint">Select a song to begin</p>
+    </div>
+    <div id="player">
+      <div id="track-label"><strong>—</strong></div>
+      <div id="progress-row">
+        <span class="t" id="t-cur">0:00</span>
+        <input type="range" id="seek" min="0" max="100" value="0" step="0.1"/>
+        <span class="t" id="t-dur">0:00</span>
+      </div>
+      <div id="controls">
+        <button id="prev-btn">⏮</button>
+        <button id="play-btn">▶ Play</button>
+        <button id="next-btn">⏭</button>
+        <input type="range" id="vol" min="0" max="1" step="0.02" value="0.8" title="Volume"/>
+      </div>
+    </div>
+  </div>
+</main>
+
+<audio id="audio"></audio>
+
+<script>
+const audio = document.getElementById('audio');
+const songList = document.getElementById('song-list');
+const lyricsArea = document.getElementById('lyrics-area');
+const trackLabel = document.getElementById('track-label');
+const playBtn = document.getElementById('play-btn');
+const seekEl = document.getElementById('seek');
+const tCur = document.getElementById('t-cur');
+const tDur = document.getElementById('t-dur');
+const volEl = document.getElementById('vol');
+
+let songs = [];
+let currentIndex = -1;
+let lyricsData = { synced: false, lines: [] };
+let lyricEls = [];
+let searchTimer = null;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const fmt = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+
+// ── Load songs ───────────────────────────────────────────────────────────────
+async function loadSongs(q = '') {
+  songList.innerHTML = '<p style="padding:14px;color:var(--muted);font-size:13px;">Loading…</p>';
+  try {
+    const res = await fetch(`/api/songs?q=${encodeURIComponent(q)}`);
+    songs = await res.json();
+    renderSongList();
+  } catch (e) {
+    songList.innerHTML = `<p style="padding:14px;color:#f87171;font-size:13px;">Error: ${e.message}</p>`;
+  }
+}
+
+function renderSongList() {
+  if (!songs.length) {
+    songList.innerHTML = '<p style="padding:14px;color:var(--muted);font-size:13px;">No songs found.</p>';
+    return;
+  }
+  songList.innerHTML = songs.map((s, i) => `
+    <div class="song ${i === currentIndex ? 'active' : ''}" data-i="${i}">
+      <div class="song-title">${s.title}</div>
+      <div class="song-artist">${s.artist || '—'}</div>
+    </div>
+  `).join('');
+  songList.querySelectorAll('.song').forEach(el => {
+    el.addEventListener('click', () => playSong(+el.dataset.i));
+  });
+}
+
+// ── Play ─────────────────────────────────────────────────────────────────────
+async function playSong(index) {
+  currentIndex = index;
+  const song = songs[index];
+  audio.src = `/api/stream/${song.id}`;
+  audio.volume = volEl.value;
+  audio.play();
+  playBtn.textContent = '⏸ Pause';
+  trackLabel.innerHTML = `<strong>${song.title}</strong> — ${song.artist || ''}`;
+  renderSongList();
+  await fetchLyrics(song);
+}
+
+// ── Lyrics ───────────────────────────────────────────────────────────────────
+async function fetchLyrics(song) {
+  lyricsArea.innerHTML = '<p style="color:var(--muted);font-size:13px;">Fetching lyrics…</p>';
+  lyricEls = [];
+  try {
+    const params = new URLSearchParams({
+      artist: song.artist || '',
+      title: song.title,
+      duration: song.duration || '',
+    });
+    const res = await fetch(`/api/lyrics?${params}`);
+    lyricsData = await res.json();
+  } catch (_) {
+    lyricsData = { synced: false, lines: [] };
+  }
+
+  if (!lyricsData.lines.length) {
+    lyricsArea.innerHTML = '<p id="lyrics-hint" style="color:var(--muted)">No lyrics found</p>';
+    return;
+  }
+
+  lyricsArea.innerHTML = '';
+  lyricsData.lines.forEach((line, i) => {
+    const el = document.createElement('div');
+    el.className = 'lyric-line upcoming';
+    el.textContent = lyricsData.synced ? line.text : line;
+    lyricsArea.appendChild(el);
+    lyricEls.push(el);
+  });
+}
+
+// ── Sync lyrics to playback time ─────────────────────────────────────────────
+function syncLyrics(currentTime) {
+  if (!lyricsData.synced || !lyricEls.length) return;
+  const lines = lyricsData.lines;
+  let activeIndex = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (currentTime >= lines[i].time) activeIndex = i;
+    else break;
+  }
+
+  lyricEls.forEach((el, i) => {
+    el.className = 'lyric-line ' + (i < activeIndex ? '' : i === activeIndex ? 'active' : 'upcoming');
+  });
+
+  if (activeIndex >= 0) {
+    lyricEls[activeIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+// ── Player controls ──────────────────────────────────────────────────────────
+playBtn.addEventListener('click', () => {
+  if (!audio.src) return;
+  if (audio.paused) { audio.play(); playBtn.textContent = '⏸ Pause'; }
+  else { audio.pause(); playBtn.textContent = '▶ Play'; }
+});
+
+document.getElementById('prev-btn').addEventListener('click', () => {
+  if (currentIndex > 0) playSong(currentIndex - 1);
+});
+document.getElementById('next-btn').addEventListener('click', () => {
+  if (currentIndex < songs.length - 1) playSong(currentIndex + 1);
+});
+
+audio.addEventListener('timeupdate', () => {
+  tCur.textContent = fmt(audio.currentTime);
+  if (!audio.seeking) seekEl.value = (audio.currentTime / (audio.duration || 1)) * 100;
+  syncLyrics(audio.currentTime);
+});
+audio.addEventListener('loadedmetadata', () => {
+  tDur.textContent = fmt(audio.duration);
+});
+audio.addEventListener('ended', () => {
+  playBtn.textContent = '▶ Play';
+  if (currentIndex < songs.length - 1) playSong(currentIndex + 1);
+});
+
+seekEl.addEventListener('input', () => {
+  audio.currentTime = (seekEl.value / 100) * audio.duration;
+});
+volEl.addEventListener('input', () => {
+  audio.volume = volEl.value;
+});
+
+// ── Search ───────────────────────────────────────────────────────────────────
+document.getElementById('search').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => loadSongs(e.target.value), 350);
+});
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+loadSongs();
+</script>
+</body>
+</html>

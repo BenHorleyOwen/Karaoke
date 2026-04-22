@@ -117,11 +117,6 @@ app.get('/api/lyrics', async (req, res) => {
   res.json({ synced: false, lines: [] });
 });
 
-// ── Debug endpoint ───────────────────────────────────────────────────────────
-app.get('/debug', (req, res) => {
-  res.json({ url: NAVIDROME_URL, user: NAV_USER });
-});
-
 // ── LRC parser ───────────────────────────────────────────────────────────────
 function parseLrc(lrc) {
   return lrc.split('\n')  

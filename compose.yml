@@ -11,10 +11,8 @@ services:
       - ./site/:/home/node/app
     environment:
       - NAVIDROME_URL=http://navidrome:4533
-      - NAVIDROME_USER={NAVIDROME_USER}
-      - NAVIDROME_PASS={NAVIDROME_PASS}
-      - NODE_PATH=/home/node/deps/node_modules
-      - CHOKIDAR_USEPOLLING=true
+      - NAVIDROME_USER
+      - NAVIDROME_PASS
     stdin_open: true
     tty: true
     command: sh -c "npm install && npm run dev"

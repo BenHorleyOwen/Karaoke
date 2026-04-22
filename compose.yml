@@ -9,20 +9,18 @@ services:
       - 5020:5020
     volumes:
       - ./site/:/home/node/app
-      - node_modules:/home/node/app/node_modules
     environment:
       - NAVIDROME_URL=http://navidrome:4533
       - NAVIDROME_USER=your_username
       - NAVIDROME_PASS=your_password
+      - NODE_PATH=/home/node/deps/node_modules
+      - CHOKIDAR_USEPOLLING=true
     stdin_open: true
     tty: true
-    command: npm run dev
+    command: sh -c "npm install && npm run dev"
     networks:
       - music-server_MusicNet
 
-volumes:
-  node_modules:
-
 networks:
   music-server_MusicNet:
-    external: true 
+    external: true

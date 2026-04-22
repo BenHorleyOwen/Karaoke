@@ -92,7 +92,7 @@ app.get('/api/lyrics', async (req, res) => {
     const r = await fetch(url);
     const d = await r.json();
     const lyrics = d['subsonic-response']?.lyrics;
-    if (lyrics?.value?.trim()) {
+    if (lyrics?.value?.trim()) { 
       return res.json({ synced: false, lines: lyrics.value.split('\n') });
     }
   } catch (_) {}
@@ -117,6 +117,11 @@ app.get('/api/lyrics', async (req, res) => {
   res.json({ synced: false, lines: [] });
 });
 
+// ── Debug endpoint ───────────────────────────────────────────────────────────
+app.get('/debug', (req, res) => {
+  res.json({ url: NAVIDROME_URL, user: NAV_USER });
+});
+
 // ── LRC parser ───────────────────────────────────────────────────────────────
 function parseLrc(lrc) {
   return lrc.split('\n')  
@@ -132,4 +137,5 @@ function parseLrc(lrc) {
 //listening on 0.0.0.0 ensures the server listens on all interfaces
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running at http://localhost:${PORT}`);
+  console.log('test');
 });

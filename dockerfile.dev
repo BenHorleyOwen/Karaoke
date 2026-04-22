@@ -1,8 +1,5 @@
 FROM node:24-alpine
-WORKDIR /home/node/app
 RUN npm install -g nodemon
-COPY site/package.json .
-RUN npm install
 USER node
-# Start an idle shell by default
+WORKDIR /home/node/app
 CMD ["sh"]
